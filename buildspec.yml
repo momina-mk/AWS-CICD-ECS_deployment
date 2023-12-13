@@ -1,0 +1,72 @@
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+      - REPOSITORY_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+  build:
+    commands:
+      - echo Build started on `date`
+      - echo Building the Docker image...  
+      - docker build -t $REPOSITORY_URI/$IMAGE_REPO_NAME:latest .
+      - docker tag $REPOSITORY_URI/$IMAGE_REPO_NAME:latest $REPOSITORY_URI/$IMAGE_REPO_NAME:$IMAGE_TAG   
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      - echo Pushing the Docker image...
+      - docker push $REPOSITORY_URI/$IMAGE_REPO_NAME:latest
+      - docker push $REPOSITORY_URI/$IMAGE_REPO_NAME:$IMAGE_TAG
+      - echo "Creating imagedefinitions.json file..."
+      - |
+        echo '[
+          {
+            "name": "app-repo",
+            "imageUri": "979490057625.dkr.ecr.us-east-1.amazonaws.com/app-repo",
+            "containerPort": 80,
+            "hostPort": 80,
+            "essential": true
+          }
+        ]' > imagedefinitions.json
+      - |
+        echo '{
+          "family": "green",
+          "networkMode": "awsvpc",
+          "requiresCompatibilities": ["FARGATE"],
+          "memory": "512",
+          "cpu": "256",
+          "executionRoleArn": "'$executionrole'",
+          "containerDefinitions": [
+            {
+              "name": "deployment",
+              "image": "979490057625.dkr.ecr.us-east-1.amazonaws.com/app-repo",
+              "portMappings": [
+                {
+                  "containerPort": 80,
+                  "hostPort": 80
+                }
+              ],
+              "memory" : 500,
+              "cpu" : 250
+            }
+          ]
+        }' > taskdef.json
+      - export TASK_DEF_ARN=$(aws ecs register-task-definition --cli-input-json file://taskdef.json --query 'taskDefinition.taskDefinitionArn' --output text)
+      - echo "'$TASK_DEF_ARN'"
+      - |
+        echo 'version: 0.0
+        Resources:
+          - TargetService:
+              Type: AWS::ECS::Service
+              Properties:
+                TaskDefinition: aws_ecs_task_definition.this.arn
+                LoadBalancerInfo:
+                  ContainerName: "deployment"
+                  ContainerPort: 80' > appspec.yaml
+
+artifacts:
+  files:
+    - imagedefinitions.json
+    - appspec.yaml
+    - taskdef.json

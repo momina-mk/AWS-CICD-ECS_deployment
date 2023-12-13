@@ -1,0 +1,9 @@
+version: 0.0
+Resources:
+  - TargetService:
+      Type: AWS::ECS::Service
+      Properties:
+        TaskDefinition: aws_ecs_task_definition.this.arn
+        LoadBalancerInfo:
+          ContainerName: "deployment"
+          ContainerPort: 80
