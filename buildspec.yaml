@@ -60,7 +60,7 @@ phases:
           - TargetService:
               Type: AWS::ECS::Service
               Properties:
-                TaskDefinition: "'$TASK_DEF_ARN'"
+                TaskDefinition: aws_ecs_task_definition.this.arn
                 LoadBalancerInfo:
                   ContainerName: "deployment"
                   ContainerPort: 80' > appspec.yaml
